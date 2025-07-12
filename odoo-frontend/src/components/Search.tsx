@@ -18,8 +18,13 @@ const Search = () => {
         fetch('/api/users')
             .then(res => res.json())
             .then(data => {
-                // Map _id to id for frontend compatibility
-                setUsers(data.map((u: any) => ({ ...u, id: u._id })));
+                const usersArray = data.data?.users || [];
+                setUsers(usersArray.map((u: any) => ({ ...u, id: u._id || u.id })));
+            })
+            .catch(error => {
+                console.error('Error fetching users:', error);
+                // Fallback to demo data if API fails
+                setUsers(demoUsers);
             });
     }, []);
 
