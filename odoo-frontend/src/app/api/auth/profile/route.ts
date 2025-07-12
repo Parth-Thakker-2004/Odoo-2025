@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import dbConnect from "@/lib/dbconnect";
-// We'll import the User model once you provide the schema
+import User from "@/models/User";
+import Skill from "@/models/Skill";
+import { validateUserSkills } from "@/lib/skill-utils";
 
 // Helper function to verify JWT token
 async function verifyToken(request: NextRequest) {
@@ -26,6 +28,42 @@ async function verifyToken(request: NextRequest) {
   }
 }
 
+// Helper function to process custom skills
+async function processCustomSkills(customSkills: Array<{name: string, category: string, isCustom: true}>) {
+  const createdSkills = [];
+  
+  for (const customSkill of customSkills) {
+    try {
+      // Check if skill already exists
+      const existingSkill = await Skill.findOne({
+        name: { $regex: new RegExp(`^${customSkill.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      });
+      
+      if (!existingSkill) {
+        // Create new unverified skill
+        const newSkill = new Skill({
+          name: customSkill.name,
+          category: customSkill.category,
+          description: `Custom skill submitted by user`,
+          isVerified: false,
+          isActive: true,
+          usageCount: 1,
+          aliases: [],
+          tags: []
+        });
+        
+        const savedSkill = await newSkill.save();
+        createdSkills.push(savedSkill);
+        console.log(`✅ Created custom skill: ${savedSkill.name}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error creating custom skill ${customSkill.name}:`, error);
+    }
+  }
+  
+  return createdSkills;
+}
+
 // GET - Get current user profile
 export async function GET(request: NextRequest) {
   try {
@@ -43,26 +81,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // TODO: Find user by ID (will implement after schema is provided)
-    // const user = await User.findById(decoded.userId).select('-password');
+    const user = await User.findById(decoded.userId).select('-passwordHash');
     
-    // if (!user) {
-    //   return NextResponse.json(
-    //     { 
-    //       error: "User not found", 
-    //       message: "User profile not found" 
-    //     },
-    //     { status: 404 }
-    //   );
-    // }
+    if (!user) {
+      return NextResponse.json(
+        { 
+          error: "User not found", 
+          message: "User profile not found" 
+        },
+        { status: 404 }
+      );
+    }
 
-    // TODO: Return actual user data once schema is implemented
     return NextResponse.json(
       {
         success: true,
-        user: {
-          // ...user.toObject()
-        }
+        user: user.toObject()
       },
       { status: 200 }
     );
@@ -99,7 +133,15 @@ export async function PUT(request: NextRequest) {
     const updateData = await request.json();
     
     // Define allowed fields that can be updated
-    const allowedUpdates = ['firstName', 'lastName', 'phoneNumber', 'dateOfBirth', 'address', 'preferences'];
+    const allowedUpdates = [
+      'name', 
+      'location', 
+      'profilePhoto', 
+      'skillsOffered', 
+      'skillsWanted', 
+      'availability', 
+      'isPublic'
+    ];
     const updates: any = {};
 
     // Only allow specific fields to be updated
@@ -109,31 +151,83 @@ export async function PUT(request: NextRequest) {
       }
     });
 
-    // TODO: Update user (will implement after schema is provided)
-    // const user = await User.findByIdAndUpdate(
-    //   decoded.userId,
-    //   updates,
-    //   { new: true, runValidators: true }
-    // ).select('-password');
+    // Validate skills if provided
+    if (updates.skillsOffered || updates.skillsWanted) {
+      try {
+        const validationResult = await validateUserSkills(
+          updates.skillsOffered || [], 
+          updates.skillsWanted || []
+        );
+        if (!validationResult.valid) {
+          return NextResponse.json(
+            {
+              error: "Skill validation failed",
+              message: validationResult.message,
+              invalidSkills: validationResult.invalidSkills
+            },
+            { status: 400 }
+          );
+        }
+        
+        // Use validated skills
+        updates.skillsOffered = validationResult.validatedSkillsOffered;
+        updates.skillsWanted = validationResult.validatedSkillsWanted;
+      } catch (skillError) {
+        console.warn("Skill validation error:", skillError);
+        // Continue with update even if skill validation fails
+      }
+    }
 
-    // if (!user) {
-    //   return NextResponse.json(
-    //     { 
-    //       error: "User not found", 
-    //       message: "User profile not found" 
-    //     },
-    //     { status: 404 }
-    //   );
-    // }
+    // Process custom skills if provided
+    let customSkillsMessage = "";
+    if (updateData.customSkillsOffered || updateData.customSkillsWanted) {
+      const allCustomSkills = [
+        ...(updateData.customSkillsOffered || []),
+        ...(updateData.customSkillsWanted || [])
+      ];
+      
+      if (allCustomSkills.length > 0) {
+        const createdSkills = await processCustomSkills(allCustomSkills);
+        customSkillsMessage = ` ${createdSkills.length} custom skill${createdSkills.length !== 1 ? 's' : ''} submitted for verification.`;
+        
+        // Add custom skill names to the appropriate arrays
+        if (updateData.customSkillsOffered) {
+          updates.skillsOffered = [
+            ...(updates.skillsOffered || []),
+            ...updateData.customSkillsOffered.map((skill: any) => skill.name)
+          ];
+        }
+        if (updateData.customSkillsWanted) {
+          updates.skillsWanted = [
+            ...(updates.skillsWanted || []),
+            ...updateData.customSkillsWanted.map((skill: any) => skill.name)
+          ];
+        }
+      }
+    }
 
-    // TODO: Return actual user data once schema is implemented
+    // Update user
+    const user = await User.findByIdAndUpdate(
+      decoded.userId,
+      updates,
+      { new: true, runValidators: true }
+    ).select('-passwordHash');
+
+    if (!user) {
+      return NextResponse.json(
+        { 
+          error: "User not found", 
+          message: "User profile not found" 
+        },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: "Profile updated successfully",
-        user: {
-          // ...user.toObject()
-        }
+        message: "Profile updated successfully." + customSkillsMessage,
+        user: user.toObject()
       },
       { status: 200 }
     );

@@ -99,7 +99,7 @@ const Dashboard = () => {
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-auto p-4 flex flex-col items-center gap-2">
-                <Link href="/profile/1">
+                <Link href="/my-profile">
                   <Users className="h-6 w-6" />
                   <span>My Profile</span>
                 </Link>

@@ -7,15 +7,23 @@ import { usePathname } from 'next/navigation';
 
 const Navigation = () => {
 //   const location = useLocation();
-    const pathname = usePathname();
+    const pathname = usePathname() || '';
 
   const navItems = [
     { path: '/dashboard', label: 'Home', icon: Home },
     { path: '/search', label: 'Search', icon: Search },
     { path: '/swap-requests', label: 'Requests', icon: MessageSquare },
     { path: '/feedback', label: 'Feedback', icon: Star },
-    { path: '/profile/1', label: 'Profile', icon: User },
+    { path: '/my-profile', label: 'Profile', icon: User },
   ];
+
+  const isProfileActive = (itemPath: string) => {
+    if (itemPath === '/my-profile') {
+      // Profile is active if we're on /my-profile or any /profile/[id] page
+      return pathname === '/profile' || pathname.startsWith('/profile/');
+    }
+    return pathname === itemPath;
+  };
 
   return (
     <nav className="bg-card border-b border-border p-4">
@@ -28,7 +36,7 @@ const Navigation = () => {
         <div className="flex space-x-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.path;
+            const isActive = isProfileActive(item.path);
             return (
               <Button
                 key={item.path}
