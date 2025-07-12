@@ -6,15 +6,49 @@ import UserCard from '@/components/UserCard';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search as SearchIcon, Filter } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Search as SearchIcon, Filter, MessageSquare, Send } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Search = () => {
     const [users, setUsers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<'all' | 'offered' | 'wanted'>('all');
     const [showPrivate, setShowPrivate] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<any>(null);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+    const [swapForm, setSwapForm] = useState({
+        skillOffered: '',
+        skillRequested: '',
+        message: ''
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
+        // Get current user ID from auth
+        const getCurrentUser = async () => {
+            try {
+                const token = localStorage.getItem('auth_token');
+                if (token) {
+                    const response = await fetch('/api/auth/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        setCurrentUserId(data.user?._id);
+                        setCurrentUserProfile(data.user);
+                    }
+                }
+            } catch (error) {
+                console.error('Error getting current user:', error);
+            }
+        };
+
+        // Fetch all users
         fetch('/api/users')
             .then(res => res.json())
             .then(data => {
@@ -23,39 +57,83 @@ const Search = () => {
             })
             .catch(error => {
                 console.error('Error fetching users:', error);
-                // Fallback to demo data if API fails
                 setUsers(demoUsers);
             });
+
+        getCurrentUser();
     }, []);
 
-    // TODO: Replace this with actual user ID from authentication/session
-    const currentUserId = "demo-user-id";
+    const handleRequestSwap = (recipientUser: any) => {
+        if (!currentUserId) {
+            toast.error('Please log in to send swap requests');
+            return;
+        }
+        setSelectedUser(recipientUser);
+        setSwapForm({ skillOffered: '', skillRequested: '', message: '' });
+        setIsModalOpen(true);
+    };
 
-    const handleRequestSwap = async (recipientUser: any) => {
-        // You may want to show a modal to select skills, but here's a simple example:
-        const skillOffered = prompt("Enter the skill you offer:");
-        const skillRequested = prompt("Enter the skill you want from this user:");
+    const handleSubmitSwap = async () => {
+        if (!swapForm.skillOffered.trim() || !swapForm.skillRequested.trim()) {
+            toast.error('Please fill in both skills');
+            return;
+        }
 
-        if (!skillOffered || !skillRequested) return;
+        if (!currentUserProfile?.name) {
+            toast.error('User profile not loaded. Please try again.');
+            return;
+        }
 
+        if (!selectedUser?.name) {
+            toast.error('Selected user data not available. Please try again.');
+            return;
+        }
+
+        setIsSubmitting(true);
         try {
-            const res = await fetch('/api/swaps', {
+            const token = localStorage.getItem('auth_token');
+            const requestData = {
+                requester: currentUserId,
+                recipient: selectedUser.id,
+                requesterId: currentUserId,
+                recipientId: selectedUser.id,
+                requesterName: currentUserProfile.name,
+                recipientName: selectedUser.name,
+                skillOffered: swapForm.skillOffered.trim(),
+                skillRequested: swapForm.skillRequested.trim(),
+                message: swapForm.message.trim()
+            };
+
+            console.log('Sending swap request data:', requestData);
+            console.log('Current user profile:', currentUserProfile);
+            console.log('Selected user:', selectedUser);
+
+            const response = await fetch('/api/swaps', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    requester: currentUserId, // You need to get this from auth/session
-                    recipient: recipientUser.id,
-                    skillOffered,
-                    skillRequested,
-                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(requestData),
             });
-            if (res.ok) {
-                alert('Swap request sent!');
+
+            console.log('Response status:', response.status);
+            const responseData = await response.json();
+            console.log('Response data:', responseData);
+
+            if (response.ok) {
+                toast.success('Swap request sent successfully!');
+                setIsModalOpen(false);
+                setSwapForm({ skillOffered: '', skillRequested: '', message: '' });
             } else {
-                alert('Failed to send swap request.');
+                console.error('Error response:', responseData);
+                toast.error(responseData.error || 'Failed to send swap request');
             }
-        } catch {
-            alert('Failed to send swap request.');
+        } catch (error) {
+            console.error('Error sending swap request:', error);
+            toast.error('Failed to send swap request');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -142,17 +220,6 @@ const Search = () => {
                         </Select>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 text-muted-foreground" />
-                        <Button
-                            variant={showPrivate ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setShowPrivate(!showPrivate)}
-                        >
-                            Show Private Profiles
-                        </Button>
-                    </div>
-
                     {/* Popular Skills */}
                     <div>
                         <h3 className="text-sm font-medium mb-2">Popular Skills:</h3>
@@ -198,6 +265,79 @@ const Search = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Swap Request Modal */}
+                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <MessageSquare className="h-5 w-5" />
+                                Request Skill Swap with {selectedUser?.name}
+                            </DialogTitle>
+                        </DialogHeader>
+                        
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="skillOffered">Skill You Offer</Label>
+                                <Select 
+                                    value={swapForm.skillOffered} 
+                                    onValueChange={(value) => setSwapForm(prev => ({...prev, skillOffered: value}))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a skill you can teach" />
+                                    </SelectTrigger>
+                                    <SelectContent>                        {/* Get current user's skills offered from current user profile */}
+                        {currentUserProfile?.skillsOffered?.map((skill: string) => (
+                            <SelectItem key={skill} value={skill}>{skill}</SelectItem>
+                        )) || <SelectItem value="none">No skills available</SelectItem>}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="skillRequested">Skill You Want to Learn</Label>
+                                <Select 
+                                    value={swapForm.skillRequested} 
+                                    onValueChange={(value) => setSwapForm(prev => ({...prev, skillRequested: value}))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a skill you want to learn" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {selectedUser?.skillsOffered?.map((skill: string) => (
+                                            <SelectItem key={skill} value={skill}>{skill}</SelectItem>
+                                        )) || <SelectItem value="none">No skills available</SelectItem>}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="message">Message (Optional)</Label>
+                                <Textarea
+                                    id="message"
+                                    placeholder="Add a personal message..."
+                                    value={swapForm.message}
+                                    onChange={(e) => setSwapForm(prev => ({...prev, message: e.target.value}))}
+                                    rows={3}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button 
+                                onClick={handleSubmitSwap} 
+                                disabled={isSubmitting || !swapForm.skillOffered || !swapForm.skillRequested}
+                                className="flex items-center gap-2"
+                            >
+                                <Send className="h-4 w-4" />
+                                {isSubmitting ? 'Sending...' : 'Send Request'}
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </div>
     );

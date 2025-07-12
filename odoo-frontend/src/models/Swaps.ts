@@ -4,6 +4,10 @@ export interface ISwap extends Document {
   _id: mongoose.Types.ObjectId;
   requester: mongoose.Types.ObjectId;
   recipient: mongoose.Types.ObjectId;
+  requesterId: string;
+  recipientId: string;
+  requesterName: string;
+  recipientName: string;
   skillOffered: string;
   skillRequested: string;
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
@@ -24,6 +28,26 @@ const swapSchema = new Schema<ISwap>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    requesterId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    recipientId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    requesterName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    recipientName: {
+      type: String,
+      required: true,
+      trim: true,
     },
     skillOffered: {
       type: String,

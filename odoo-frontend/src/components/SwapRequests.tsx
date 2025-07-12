@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react';
-import { demoUsers, currentUserId } from '@/data/demoData';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,26 +12,83 @@ import { toast } from 'sonner';
 const SwapRequests = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [userCache, setUserCache] = useState<{[key: string]: any}>({});
+
+  // Fetch current user profile
+  const fetchCurrentUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const response = await fetch('/api/auth/profile', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const responseData = await response.json();
+        if (responseData.success && responseData.user) {
+          setCurrentUserProfile(responseData.user);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
 
   // Fetch swap requests from backend
   useEffect(() => {
-    fetch('/api/swaps')
-      .then(res => res.json())
-      .then(data => setRequests(data))
-      .catch(() => toast.error('Failed to load swap requests'))
-      .finally(() => setLoading(false));
+    const fetchData = async () => {
+      await fetchCurrentUserProfile();
+      
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/swaps', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setRequests(Array.isArray(data) ? data : []);
+        } else {
+          toast.error('Failed to load swap requests');
+        }
+      } catch {
+        toast.error('Failed to load swap requests');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  const sentRequests = requests.filter(r => r.requester === currentUserId);
-  const receivedRequests = requests.filter(r => r.recipient === currentUserId);
+  // Get current user ID from profile or fallback to demo
+  const currentUserId = currentUserProfile?.id || currentUserProfile?._id;
+  
+  const sentRequests = requests.filter(r => r.requesterId === currentUserId);
+  const receivedRequests = requests.filter(r => r.recipientId === currentUserId);
 
-  const getUserById = (id: string) => demoUsers.find(u => u.id === id);
+  // Fetch user data by ID (could be enhanced to fetch from API)
+  const getUserById = (id: string) => {
+    // For now, return a placeholder since we don't have user lookup API
+    // In a real app, you'd fetch user data by ID from an API
+    return {
+      id,
+      name: `User ${id.slice(-4)}`, // Show last 4 chars of ID
+      profilePhoto: '',
+    };
+  };
 
   const handleAcceptRequest = async (requestId: string) => {
     try {
+      const token = localStorage.getItem('auth_token');
       await fetch(`/api/swaps/${requestId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ status: 'accepted' }),
       });
       setRequests(prev => prev.map(req =>
@@ -46,9 +102,13 @@ const SwapRequests = () => {
 
   const handleRejectRequest = async (requestId: string) => {
     try {
+      const token = localStorage.getItem('auth_token');
       await fetch(`/api/swaps/${requestId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ status: 'rejected' }),
       });
       setRequests(prev => prev.map(req =>
@@ -62,7 +122,11 @@ const SwapRequests = () => {
 
   const handleDeleteRequest = async (requestId: string) => {
     try {
-      await fetch(`/api/swaps/${requestId}`, { method: 'DELETE' });
+      const token = localStorage.getItem('auth_token');
+      await fetch(`/api/swaps/${requestId}`, { 
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       setRequests(prev => prev.filter(req => req._id !== requestId));
       toast.success('Swap request deleted.');
     } catch {
@@ -81,7 +145,13 @@ const SwapRequests = () => {
   };
 
   const RequestCard = ({ request, isSent }: { request: any, isSent: boolean }) => {
-    const otherUser = getUserById(isSent ? request.recipient : request.requester);
+    // Use the names from the request data if available, otherwise use placeholder
+    const otherUser = {
+      id: isSent ? request.recipientId : request.requesterId,
+      name: isSent ? (request.recipientName || `User ${request.recipientId?.slice(-4)}`) : (request.requesterName || `User ${request.requesterId?.slice(-4)}`),
+      profilePhoto: '', // Could be added to API response later
+    };
+
     if (!otherUser) return null;
 
     return (
@@ -91,7 +161,7 @@ const SwapRequests = () => {
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
                 <AvatarImage src={otherUser.profilePhoto} alt={otherUser.name} />
-                <AvatarFallback>{otherUser.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                <AvatarFallback>{otherUser.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
               </Avatar>
               <div>
                 <CardTitle className="text-lg">{otherUser.name}</CardTitle>
