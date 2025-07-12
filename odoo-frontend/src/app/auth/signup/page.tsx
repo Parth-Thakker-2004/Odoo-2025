@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 // Remove zodResolver since we're using manual validation
+import { SkillsMultiSelect } from '../../../components/SkillsMultiSelect';
 import { MultiSelect } from '../../../components/MultiSelect';
 
 // Define the form schema with Zod
@@ -34,6 +35,12 @@ type SignupFormValues = {
   isPublic: boolean;
 };
 
+interface CustomSkill {
+  name: string;
+  category: string;
+  isCustom: true;
+}
+
 const availabilityOptions = [
   { value: 'weekdays', label: 'Weekdays' },
   { value: 'weekends', label: 'Weekends' },
@@ -62,6 +69,8 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [customSkillsOffered, setCustomSkillsOffered] = useState<CustomSkill[]>([]);
+  const [customSkillsWanted, setCustomSkillsWanted] = useState<CustomSkill[]>([]);
   // We'll use React Hook Form's setValue instead of separate state variables
 
   // Use a simpler approach without zodResolver to avoid type issues
@@ -116,12 +125,24 @@ export default function SignupPage() {
     }
     
     try {
+      const requestBody: any = {
+        ...data
+      };
+
+      // Add custom skills if any
+      if (customSkillsOffered.length > 0) {
+        requestBody.customSkillsOffered = customSkillsOffered;
+      }
+      if (customSkillsWanted.length > 0) {
+        requestBody.customSkillsWanted = customSkillsWanted;
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestBody),
       });
 
       const result = await response.json();
@@ -130,7 +151,15 @@ export default function SignupPage() {
         throw new Error(result.message || 'Registration failed');
       }
 
-      setSuccessMessage("Registration successful! You can now log in with your credentials.");
+      let successMsg = "Registration successful! You can now log in with your credentials.";
+      
+      // Add custom skills info if any were submitted
+      if (customSkillsOffered.length > 0 || customSkillsWanted.length > 0) {
+        const totalCustom = customSkillsOffered.length + customSkillsWanted.length;
+        successMsg += ` ${totalCustom} custom skill${totalCustom > 1 ? 's' : ''} submitted for admin verification.`;
+      }
+
+      setSuccessMessage(successMsg);
       
       // Redirect to login page after a short delay
       setTimeout(() => {
@@ -280,11 +309,13 @@ export default function SignupPage() {
               <label htmlFor="skillsOffered" className="text-sm font-medium">
                 Skills you can offer
               </label>
-              <MultiSelect 
-                options={commonSkillsOptions}
+              <SkillsMultiSelect 
                 selected={form.watch('skillsOffered')}
-                onChange={(selected) => form.setValue('skillsOffered', selected)}
-                placeholder="Select or type skills you can offer..."
+                onChange={(selected: string[], customSkills: CustomSkill[]) => {
+                  form.setValue('skillsOffered', selected);
+                  setCustomSkillsOffered(customSkills);
+                }}
+                placeholder="Select or add skills you can offer..."
               />
               {form.formState.errors.skillsOffered && (
                 <p className="text-sm text-red-500">
@@ -298,11 +329,13 @@ export default function SignupPage() {
               <label htmlFor="skillsWanted" className="text-sm font-medium">
                 Skills you want to learn
               </label>
-              <MultiSelect 
-                options={commonSkillsOptions}
+              <SkillsMultiSelect 
                 selected={form.watch('skillsWanted')}
-                onChange={(selected) => form.setValue('skillsWanted', selected)}
-                placeholder="Select or type skills you want to learn..."
+                onChange={(selected: string[], customSkills: CustomSkill[]) => {
+                  form.setValue('skillsWanted', selected);
+                  setCustomSkillsWanted(customSkills);
+                }}
+                placeholder="Select or add skills you want to learn..."
               />
               {form.formState.errors.skillsWanted && (
                 <p className="text-sm text-red-500">
@@ -319,7 +352,7 @@ export default function SignupPage() {
               <MultiSelect 
                 options={availabilityOptions}
                 selected={form.watch('availability')}
-                onChange={(selected) => form.setValue('availability', selected)}
+                onChange={(selected: string[]) => form.setValue('availability', selected)}
                 placeholder="Select your availability..."
               />
               {form.formState.errors.availability && (
