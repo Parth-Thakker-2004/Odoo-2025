@@ -2,16 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/dbconnect";
 import User from "@/models/User";
+import LoginLog from "@/models/LoginLog";
 import { generateJWT } from "@/lib/jwt";
+import { extractRequestInfo } from "@/lib/request-utils";
 
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
     
     const { email, password } = await request.json();
+    const requestInfo = extractRequestInfo(request);
 
     // Validate required fields
     if (!email || !password) {
+      // Log failed attempt
+      await LoginLog.create({
+        email: email || 'unknown',
+        ipAddress: requestInfo.ipAddress,
+        userAgent: requestInfo.userAgent,
+        deviceInfo: requestInfo.deviceInfo,
+        success: false,
+        failureReason: 'Missing credentials'
+      });
+
       return NextResponse.json(
         { 
           error: "Missing credentials", 
@@ -24,6 +37,16 @@ export async function POST(request: NextRequest) {
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      // Log failed attempt
+      await LoginLog.create({
+        email,
+        ipAddress: requestInfo.ipAddress,
+        userAgent: requestInfo.userAgent,
+        deviceInfo: requestInfo.deviceInfo,
+        success: false,
+        failureReason: 'Invalid email format'
+      });
+
       return NextResponse.json(
         { 
           error: "Invalid email format", 
@@ -37,6 +60,16 @@ export async function POST(request: NextRequest) {
     const user = await User.findOne({ email: email.toLowerCase() }).select('+passwordHash');
     
     if (!user) {
+      // Log failed attempt
+      await LoginLog.create({
+        email,
+        ipAddress: requestInfo.ipAddress,
+        userAgent: requestInfo.userAgent,
+        deviceInfo: requestInfo.deviceInfo,
+        success: false,
+        failureReason: 'User not found'
+      });
+
       return NextResponse.json(
         { 
           error: "Invalid credentials", 
@@ -48,6 +81,17 @@ export async function POST(request: NextRequest) {
 
     // Check if user is banned
     if (user.isBanned) {
+      // Log failed attempt
+      await LoginLog.create({
+        userId: user._id,
+        email,
+        ipAddress: requestInfo.ipAddress,
+        userAgent: requestInfo.userAgent,
+        deviceInfo: requestInfo.deviceInfo,
+        success: false,
+        failureReason: 'Account banned'
+      });
+
       return NextResponse.json(
         { 
           error: "Account banned", 
@@ -61,6 +105,17 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     
     if (!isPasswordValid) {
+      // Log failed attempt
+      await LoginLog.create({
+        userId: user._id,
+        email,
+        ipAddress: requestInfo.ipAddress,
+        userAgent: requestInfo.userAgent,
+        deviceInfo: requestInfo.deviceInfo,
+        success: false,
+        failureReason: 'Invalid password'
+      });
+
       return NextResponse.json(
         { 
           error: "Invalid credentials", 
@@ -75,6 +130,16 @@ export async function POST(request: NextRequest) {
       userId: user._id.toString(),
       email: user.email,
       role: user.role
+    });
+
+    // Log successful login
+    await LoginLog.create({
+      userId: user._id,
+      email,
+      ipAddress: requestInfo.ipAddress,
+      userAgent: requestInfo.userAgent,
+      deviceInfo: requestInfo.deviceInfo,
+      success: true
     });
 
     // Return user data (excluding password)
