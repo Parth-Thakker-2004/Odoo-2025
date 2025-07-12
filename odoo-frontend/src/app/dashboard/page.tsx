@@ -7,17 +7,36 @@ import { Button } from '@/components/ui/button';
 import { Users, MessageSquare, Star, TrendingUp } from 'lucide-react';
 // import { Link } from 'react-router-dom';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 const Dashboard = () => {
   const currentUser = demoUsers.find(u => u.id === currentUserId);
   const myRequests = demoSwapRequests.filter(r => r.fromUserId === currentUserId || r.toUserId === currentUserId);
   const pendingRequests = myRequests.filter(r => r.status === 'pending');
   const completedSwaps = myRequests.filter(r => r.status === 'completed');
-  
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/users')
+      .then(res => res.json())
+      .then(data => {
+        // If your API returns an array directly:
+        setUsers(data.map((u: any) => ({ ...u, id: u._id })));
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
   // Show recent public users (excluding current user)
-  const recentUsers = demoUsers
-    .filter(u => u.id !== currentUserId && u.profileVisibility === 'public')
+  // You may need to fetch swap requests from backend as well for real data
+  // const pendingRequests = []; // TODO: fetch from backend
+  // const completedSwaps = []; // TODO: fetch from backend
+
+  const recentUsers = users
+    .filter(u => u.id !== currentUserId && u.isPublic)
     .slice(0, 3);
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,7 +60,9 @@ const Dashboard = () => {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{demoUsers.length}</div>
+              <div className="text-2xl font-bold">
+                {loading ? '0' : users.length ?? 0}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -50,16 +71,10 @@ const Dashboard = () => {
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{pendingRequests.length}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Your Rating</CardTitle>
-              <Star className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{currentUser?.rating || 0}</div>
+              <div className="text-2xl font-bold">
+                {/* Replace with real pendingRequests.length if available */}
+                {typeof pendingRequests !== 'undefined' ? pendingRequests.length : 0}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -68,7 +83,22 @@ const Dashboard = () => {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{completedSwaps.length}</div>
+              <div className="text-2xl font-bold">
+                {/* Replace with real completedSwaps.length if available */}
+                {typeof completedSwaps !== 'undefined' ? completedSwaps.length : 0}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Feedback</CardTitle>
+              <Star className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {/* Replace with real feedback count if available */}
+                0
+              </div>
             </CardContent>
           </Card>
         </div>
