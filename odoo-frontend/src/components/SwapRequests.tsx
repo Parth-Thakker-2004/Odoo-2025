@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react';
-import { demoSwapRequests, demoUsers, currentUserId } from '@/data/demoData';
+import { useEffect, useState } from 'react';
+import { demoUsers, currentUserId } from '@/data/demoData';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,30 +11,63 @@ import { CheckCircle, XCircle, Clock, Trash2, MessageSquare } from 'lucide-react
 import { toast } from 'sonner';
 
 const SwapRequests = () => {
-  const [requests, setRequests] = useState(demoSwapRequests);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const sentRequests = requests.filter(r => r.fromUserId === currentUserId);
-  const receivedRequests = requests.filter(r => r.toUserId === currentUserId);
+  // Fetch swap requests from backend
+  useEffect(() => {
+    fetch('/api/swaps')
+      .then(res => res.json())
+      .then(data => setRequests(data))
+      .catch(() => toast.error('Failed to load swap requests'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const sentRequests = requests.filter(r => r.requester === currentUserId);
+  const receivedRequests = requests.filter(r => r.recipient === currentUserId);
 
   const getUserById = (id: string) => demoUsers.find(u => u.id === id);
 
-  const handleAcceptRequest = (requestId: string) => {
-    setRequests(prev => prev.map(req => 
-      req.id === requestId ? { ...req, status: 'accepted' as const } : req
-    ));
-    toast.success('Swap request accepted!');
+  const handleAcceptRequest = async (requestId: string) => {
+    try {
+      await fetch(`/api/swaps/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'accepted' }),
+      });
+      setRequests(prev => prev.map(req =>
+        req._id === requestId ? { ...req, status: 'accepted' } : req
+      ));
+      toast.success('Swap request accepted!');
+    } catch {
+      toast.error('Failed to accept request');
+    }
   };
 
-  const handleRejectRequest = (requestId: string) => {
-    setRequests(prev => prev.map(req => 
-      req.id === requestId ? { ...req, status: 'rejected' as const } : req
-    ));
-    toast.success('Swap request rejected.');
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      await fetch(`/api/swaps/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' }),
+      });
+      setRequests(prev => prev.map(req =>
+        req._id === requestId ? { ...req, status: 'rejected' } : req
+      ));
+      toast.success('Swap request rejected.');
+    } catch {
+      toast.error('Failed to reject request');
+    }
   };
 
-  const handleDeleteRequest = (requestId: string) => {
-    setRequests(prev => prev.filter(req => req.id !== requestId));
-    toast.success('Swap request deleted.');
+  const handleDeleteRequest = async (requestId: string) => {
+    try {
+      await fetch(`/api/swaps/${requestId}`, { method: 'DELETE' });
+      setRequests(prev => prev.filter(req => req._id !== requestId));
+      toast.success('Swap request deleted.');
+    } catch {
+      toast.error('Failed to delete request');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -47,8 +80,8 @@ const SwapRequests = () => {
     }
   };
 
-  const RequestCard = ({ request, isSent }: { request: typeof demoSwapRequests[0], isSent: boolean }) => {
-    const otherUser = getUserById(isSent ? request.toUserId : request.fromUserId);
+  const RequestCard = ({ request, isSent }: { request: any, isSent: boolean }) => {
+    const otherUser = getUserById(isSent ? request.recipient : request.requester);
     if (!otherUser) return null;
 
     return (
@@ -84,7 +117,7 @@ const SwapRequests = () => {
               <h4 className="font-medium text-sm text-muted-foreground">
                 {isSent ? 'You Want:' : 'They Want:'}
               </h4>
-              <Badge variant="secondary">{request.skillWanted}</Badge>
+              <Badge variant="secondary">{request.skillRequested}</Badge>
             </div>
           </div>
           
@@ -99,7 +132,7 @@ const SwapRequests = () => {
             {!isSent && request.status === 'pending' && (
               <>
                 <Button
-                  onClick={() => handleAcceptRequest(request.id)}
+                  onClick={() => handleAcceptRequest(request._id)}
                   size="sm"
                   className="flex items-center gap-1"
                 >
@@ -107,7 +140,7 @@ const SwapRequests = () => {
                   Accept
                 </Button>
                 <Button
-                  onClick={() => handleRejectRequest(request.id)}
+                  onClick={() => handleRejectRequest(request._id)}
                   variant="outline"
                   size="sm"
                   className="flex items-center gap-1"
@@ -120,7 +153,7 @@ const SwapRequests = () => {
             
             {isSent && request.status === 'pending' && (
               <Button
-                onClick={() => handleDeleteRequest(request.id)}
+                onClick={() => handleDeleteRequest(request._id)}
                 variant="outline"
                 size="sm"
                 className="flex items-center gap-1 text-red-600 hover:text-red-700"
@@ -166,7 +199,11 @@ const SwapRequests = () => {
           </TabsList>
           
           <TabsContent value="received" className="mt-6">
-            {receivedRequests.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Loading...
+              </div>
+            ) : receivedRequests.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No received requests yet.</p>
@@ -175,14 +212,18 @@ const SwapRequests = () => {
             ) : (
               <div>
                 {receivedRequests.map((request) => (
-                  <RequestCard key={request.id} request={request} isSent={false} />
+                  <RequestCard key={request._id} request={request} isSent={false} />
                 ))}
               </div>
             )}
           </TabsContent>
           
           <TabsContent value="sent" className="mt-6">
-            {sentRequests.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Loading...
+              </div>
+            ) : sentRequests.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No sent requests yet.</p>
@@ -191,7 +232,7 @@ const SwapRequests = () => {
             ) : (
               <div>
                 {sentRequests.map((request) => (
-                  <RequestCard key={request.id} request={request} isSent={true} />
+                  <RequestCard key={request._id} request={request} isSent={true} />
                 ))}
               </div>
             )}

@@ -53,6 +53,8 @@ interface User {
 const Profile = () => {
   const params = useParams<{ id: string }>();
   const id = params?.id;
+  const user = demoUsers.find(u => u.id === id);
+  const isOwnProfile = id === currentUserId;
   
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
