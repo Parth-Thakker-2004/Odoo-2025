@@ -3,12 +3,14 @@
 import { Button } from '@/components/ui/button';
 import { Home, Search, MessageSquare, Star, User } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const Navigation = () => {
 //   const location = useLocation();
+    const pathname = usePathname();
 
   const navItems = [
-    { path: '/', label: 'Home', icon: Home },
+    { path: '/dashboard', label: 'Home', icon: Home },
     { path: '/search', label: 'Search', icon: Search },
     { path: '/swap-requests', label: 'Requests', icon: MessageSquare },
     { path: '/feedback', label: 'Feedback', icon: Star },
@@ -26,7 +28,7 @@ const Navigation = () => {
         <div className="flex space-x-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = pathname === item.path;
             return (
               <Button
                 key={item.path}
