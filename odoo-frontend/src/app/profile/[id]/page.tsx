@@ -456,7 +456,10 @@ const Profile = () => {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => setEditData(prev => prev ? { ...prev, profilePhoto: undefined } : null)}
+                          onClick={() => {
+                            setEditData(prev => prev ? { ...prev, profilePhoto: '' } : null);
+                            toast.success('Photo removed! Don\'t forget to save your changes.');
+                          }}
                           disabled={uploadingPhoto}
                         >
                           Remove Photo
