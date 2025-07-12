@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react';
-import { demoSwapRequests, demoUsers, demoFeedback, currentUserId } from '@/data/demoData';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { demoUsers, demoSwapRequests, demoFeedback, currentUserId } from '@/data/demoData';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,32 +11,69 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Star, MessageSquare, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner';
+
+type FeedbackType = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  swapRequestId: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+};
+
+type SwapType = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  skillOffered: string;
+  skillWanted: string;
+  status: string; // Added status property
+};
 
 const Feedback = () => {
+  const [feedbacks, setFeedbacks] = useState<FeedbackType[]>(
+    demoFeedback.map(fb => ({
+      ...fb,
+      createdAt: typeof fb.createdAt === 'string' ? fb.createdAt : fb.createdAt.toISOString(),
+    }))
+  );
+  const [completedSwaps, setCompletedSwaps] = useState<SwapType[]>(demoSwapRequests);
   const [selectedSwapId, setSelectedSwapId] = useState('');
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
 
-  // Get completed swaps that haven't been rated yet
-  const completedSwaps = demoSwapRequests.filter(r => 
-    r.status === 'completed' && 
-    (r.fromUserId === currentUserId || r.toUserId === currentUserId) &&
-    !demoFeedback.some(f => f.swapRequestId === r.id && f.fromUserId === currentUserId)
-  );
-
   const getUserById = (id: string) => demoUsers.find(u => u.id === id);
 
-  const handleSubmitFeedback = () => {
+  const handleSubmitFeedback = async () => {
     if (!selectedSwapId || rating === 0 || !comment.trim()) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    // In a real app, this would make an API call
+    // Check if feedback already exists for the selected swap
+    const existingFeedback = feedbacks.find(
+      (feedback) => feedback.swapRequestId === selectedSwapId
+    );
+
+    if (existingFeedback) {
+      toast.error('You have already submitted feedback for this swap');
+      return;
+    }
+
+    // Simulate adding feedback to demo data
+    const newFeedback: FeedbackType = {
+      id: (feedbacks.length + 1).toString(),
+      swapRequestId: selectedSwapId,
+      fromUserId: currentUserId,
+      toUserId: completedSwaps.find(s => s.id === selectedSwapId)?.toUserId || '',
+      rating,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+
+    setFeedbacks((prev) => [...prev, newFeedback]);
     toast.success('Feedback submitted successfully!');
-    
-    // Reset form
     setSelectedSwapId('');
     setRating(0);
     setComment('');
@@ -59,7 +97,7 @@ const Feedback = () => {
     );
   };
 
-  const selectedSwap = demoSwapRequests.find(s => s.id === selectedSwapId);
+  const selectedSwap = completedSwaps.find(s => s.id === selectedSwapId);
   const otherUser = selectedSwap ? 
     getUserById(selectedSwap.fromUserId === currentUserId ? selectedSwap.toUserId : selectedSwap.fromUserId) 
     : null;
@@ -85,7 +123,7 @@ const Feedback = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {completedSwaps.length === 0 ? (
+              {completedSwaps.filter(s => s.status === 'completed').length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No completed swaps to rate.</p>
@@ -100,7 +138,7 @@ const Feedback = () => {
                         <SelectValue placeholder="Choose a swap to rate" />
                       </SelectTrigger>
                       <SelectContent>
-                        {completedSwaps.map((swap) => {
+                        {completedSwaps.filter(s => s.status === 'completed').map((swap) => {
                           const otherUserId = swap.fromUserId === currentUserId ? swap.toUserId : swap.fromUserId;
                           const otherUserName = getUserById(otherUserId)?.name;
                           return (
@@ -112,21 +150,6 @@ const Feedback = () => {
                       </SelectContent>
                     </Select>
                   </div>
-
-                  {selectedSwap && otherUser && (
-                    <div className="p-4 bg-muted rounded-lg">
-                      <div className="flex items-center gap-3 mb-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={otherUser.profilePhoto} alt={otherUser.name} />
-                          <AvatarFallback>{otherUser.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium">{otherUser.name}</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Swap: {selectedSwap.skillOffered} ↔ {selectedSwap.skillWanted}
-                      </p>
-                    </div>
-                  )}
 
                   <div className="space-y-2">
                     <Label>Rating</Label>
@@ -156,7 +179,7 @@ const Feedback = () => {
             </CardContent>
           </Card>
 
-          {/* Previous Feedback */}
+          {/* Recent Feedback */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -165,7 +188,7 @@ const Feedback = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {demoFeedback.length === 0 ? (
+              {feedbacks.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No feedback yet.</p>
@@ -173,33 +196,27 @@ const Feedback = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {demoFeedback.map((feedback) => {
+                  {feedbacks.map((feedback) => {
                     const fromUser = getUserById(feedback.fromUserId);
                     const toUser = getUserById(feedback.toUserId);
-                    const swap = demoSwapRequests.find(s => s.id === feedback.swapRequestId);
-                    
-                    if (!fromUser || !toUser || !swap) return null;
 
                     return (
                       <div key={feedback.id} className="p-4 border rounded-lg space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Avatar className="h-6 w-6">
-                              <AvatarImage src={fromUser.profilePhoto} alt={fromUser.name} />
+                              <AvatarImage src={fromUser?.profilePhoto} alt={fromUser?.name} />
                               <AvatarFallback className="text-xs">
-                                {fromUser.name.split(' ').map(n => n[0]).join('')}
+                                {fromUser?.name.split(' ').map((n) => n[0]).join('')}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-medium">{fromUser.name}</span>
+                            <span className="text-sm font-medium">{fromUser?.name}</span>
                             <span className="text-sm text-muted-foreground">→</span>
-                            <span className="text-sm">{toUser.name}</span>
+                            <span className="text-sm">{toUser?.name}</span>
                           </div>
                           {renderStars(feedback.rating)}
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          Swap: {swap.skillOffered} ↔ {swap.skillWanted}
-                        </p>
-                        <p className="text-sm">{feedback.comment}</p>
+                        <p className="text-sm text-muted-foreground">{feedback.comment}</p>
                         <p className="text-xs text-muted-foreground">
                           {new Date(feedback.createdAt).toLocaleDateString()}
                         </p>
