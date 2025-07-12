@@ -17,7 +17,8 @@ import { toast } from 'sonner';
 import { useState } from 'react';
 
 const Profile = () => {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
   const user = demoUsers.find(u => u.id === id);
   const isOwnProfile = id === currentUserId;
   
