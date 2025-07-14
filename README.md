@@ -67,21 +67,6 @@ Follow these steps to set up the project locally:
   1. Log in as an admin to access the dashboard.
   2. Moderate skill descriptions, ban users, monitor swaps, or send platform-wide messages.
 
-## Project Structure
-```
-skill-swap-platform/
-├── app/                    # Next.js app directory (pages, components, API routes)
-├── components/             # Reusable shadcn/ui components and custom components
-├── lib/                    # Utility functions and MongoDB connection logic
-├── scripts/                # Seed scripts for demo data
-├── public/                 # Static assets (e.g., images)
-├── styles/                 # Global styles and Tailwind CSS configuration
-├── .env.local              # Environment variables (not tracked)
-├── package.json            # Dependencies and scripts
-└── README.md               # This file
-```
-
-
 ## Acknowledgements
 - Built for **Odoo Hackathon '25**.
 - Powered by [Next.js](https://nextjs.org/), [MongoDB](https://www.mongodb.com/), and [shadcn/ui](https://ui.shadcn.com/).
